@@ -1,2 +1,2 @@
-# custom-half-tone-portraits
-Exploring half tone filters, to be applied on woodblock printing.
+# halftone
+A generative halftone filter for photos, in p5.js.
