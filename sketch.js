@@ -1,27 +1,21 @@
-// ok, so we have a descent POC, but we need to organize better this code, for two main reasons:
-// 1) scalability
-// 2) so it can deliver value to people. I see opportunities on: a) uploaded files as PGraphics, seamlessly; b) how to apply shaders to images to PGraphics, seamlesslt
-
-
-
-
-let art;
-let halftone;
-let halftonePattern;
-let artBlurShader;
-let halftoneBlurShader;
+// image
 let img;
+let imgShader;
+let imgBlurred;
 
-let uploadedImg;
-let isImageUploaded = false;
-let isArtLoaded = false;
+// halftone
+let halftoneBlurred;
+let halftonePattern;
+let halftoneShader;
 
+// interface
 let _UI_MARGIN_X = 10;
 let _UI_MARGIN_Y = 10;
 let _UI_ELEM_MARGIN_Y = 30;
+let _UI_COLUMN_WIDTH = 155;
 let interface = [];
-let artBlur;
-let halftoneBlur;
+let imgBlurSlider;
+let halftoneBlurSlider;
 let threshold;
 let linesQty;
 let linesThickness;
@@ -31,41 +25,53 @@ let smooth;
 let bgcolor;
 
 function preload() {
-  artBlurShader = loadShader('assets/blur.vert', 'assets/blur.frag');
-  halftoneBlurShader = loadShader('assets/blur.vert', 'assets/blur.frag');
-  img = loadImage('assets/person.jpg');
+  imgShader = loadShader('assets/shaders/blur.vert', 'assets/shaders/blur.frag');
+  halftoneShader = loadShader('assets/shaders/blur.vert', 'assets/shaders/blur.frag');
 }
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
 
-  art = createGraphics(width, height, WEBGL);
-  art.shader(artBlurShader);
+  // image
+  img = new PUploadedImage();
+  img.init();
+  img.position(0,0);
+  img.callback = () => {
+    if (imgBlurred == undefined) {
+      imgBlurred = new PImageWithShader(img.image,imgShader);
+    } else {
+      imgBlurred.content.clear();
+      imgBlurred.content.resizeCanvas(img.image.width,img.image.height);
+      imgBlurred.rendered.resizeCanvas(img.image.width,img.image.height);
+      imgBlurred.content.image(img.image,0,0);
+      imgBlurred.rendered.rect(-imgBlurred.rendered.width/2,-imgBlurred.rendered.height/2,imgBlurred.rendered.width,imgBlurred.rendered.height);
+    }
+  }  
 
   // interface
-  interface.push(createFileInput(handleImageFile));
-  artBlur = createSlider(0.0001, 0.001, 0.0001, 0.0001);
-  artBlur.input(updateArt);
-  interface.push(artBlur);
-  halftoneBlur = createSlider(0.0001, 0.001, 0.0001, 0.0001);
-  halftoneBlur.input(updateHalftone);
-  interface.push(halftoneBlur);
+  interface.push(img.dom);
+  imgBlurSlider = createSlider(0.0001, 0.001, 0.0001, 0.0001);
+  imgBlurSlider.input(refreshImgBlur);
+  interface.push(imgBlurSlider);
+  halftoneBlurSlider = createSlider(0.0001, 0.001, 0.0001, 0.0001);
+  halftoneBlurSlider.input(refreshHalftoneBlur);
+  interface.push(halftoneBlurSlider);
   threshold = createSlider(0, 1, 0.5, 0.01);
   interface.push(threshold);
   linesQty = createSlider(0, 50, 25, 5);
-  linesQty.input(updateHalftonePattern);
+  linesQty.input(refreshHalftonePattern);
   interface.push(linesQty);
   linesThickness = createSlider(0, 20, 10, 1);
-  linesThickness.input(updateHalftonePattern);
+  linesThickness.input(refreshHalftonePattern);
   interface.push(linesThickness);
   frequency = createSlider(0, 50, 25, 1);
-  frequency.input(updateHalftonePattern);
+  frequency.input(refreshHalftonePattern);
   interface.push(frequency);
   amplitude = createSlider(0, 50, 25, 1);
-  amplitude.input(updateHalftonePattern);
+  amplitude.input(refreshHalftonePattern);
   interface.push(amplitude);
-  smooth = createSlider(1,100,1,1);
-  smooth.input(updateHalftonePattern);
+  smooth = createSlider(1,100,50,1);
+  smooth.input(refreshHalftonePattern);
   interface.push(smooth);
   let btn = createButton('Salvar');
   btn.mousePressed(save);
@@ -74,30 +80,32 @@ function setup() {
     interface[i].position(_UI_MARGIN_X, _UI_MARGIN_Y + _UI_ELEM_MARGIN_Y*i);
   }
 
-  halftone = createGraphics(width, height, WEBGL);
-  halftone.shader(halftoneBlurShader);
+  // halftone
   halftonePattern = createGraphics(width, height);
-  loadHalftonePattern();
-  loadHalftone();
-
-
-
+  refreshHalftonePattern();
+  halftoneBlurred = new PImageWithShader(halftonePattern,halftoneShader);
 
 }
 
 function draw() {
   background(200);
-  if (isImageUploaded && uploadedImg.width && uploadedImg.height) { 
-    if (!isArtLoaded) {
-      loadArt();
-    }
-    image(art,(width-uploadedImg.width)/2,0,uploadedImg.width,uploadedImg.height);
+  if (imgBlurred) {
+    image(imgBlurred.image(),(width-imgBlurred.image().width)/2+_UI_COLUMN_WIDTH,0);
   }
-  image(halftone,0,0,width,height);
-  filter(THRESHOLD, threshold.value());
+  
+ image(halftoneBlurred.image(),_UI_COLUMN_WIDTH,0);
+ filter(THRESHOLD, threshold.value());
 }
 
-function loadHalftonePattern() {
+function refreshImgBlur() {
+  imgBlurred.setUniform('texelSize', [imgBlurSlider.value(), imgBlurSlider.value()]);
+}
+
+function refreshHalftoneBlur() {
+  halftoneBlurred.setUniform('texelSize', [halftoneBlurSlider.value(), halftoneBlurSlider.value()]);
+}
+
+function refreshHalftonePattern() {
   let lines = linesQty.value();
   let thickness = linesThickness.value();
   halftonePattern.clear();
@@ -111,182 +119,70 @@ function loadHalftonePattern() {
     }
     halftonePattern.endShape();
   }
-
-
-  // for (let i = 0; i < lines; i++) {
-  //   halftone.line(0,height/lines*i,width,height/lines*i);
-  // }
-}
-
-function handleImageFile(file) {
-  if (file.type === 'image') {
-    reset();
-    uploadedImg = createImg(file.data, '');
-    uploadedImg.hide();
-    isArtLoaded = false;
-    isImageUploaded = true;
-  } else {
-    uploadedImg = null;
+  if (halftoneBlurred) {
+    halftoneBlurred.content.clear();
+    halftoneBlurred.content.image(halftonePattern,0,0);
+    halftoneBlurred.rendered.rect(-halftoneBlurred.rendered.width/2,-halftoneBlurred.rendered.height/2,halftoneBlurred.rendered.width,halftoneBlurred.rendered.height);
   }
-}
-
-function reset() {
-  let previousImage = selectAll('img');
-  for (let i = 0; i < previousImage.length; i++) {
-    previousImage[i].remove();
-  }
-  artBlur.value(0.0001);
-}
-
-function updateArt() {
-  //loadArt();
-  updateArtBlur();
-}
-
-function loadArt() {
-  let imgHeight = height;
-  let imgWidth = (uploadedImg.width/uploadedImg.height)*height;
-  artBlurShader.setUniform('tex0', uploadedImg);
-  art.clear();
-  art.rect(0,0,imgWidth,imgHeight); 
-  isArtLoaded = true;
-  console.log('art loaded');
-}
-
-function loadHalftone() {
-  halftoneBlurShader.setUniform('tex0', halftonePattern);
-  halftone.clear();
-  halftone.rect(0,0,halftone.width,halftone.height); 
-  console.log('halftone loaded');
-}
-
-function updateArtBlur() {
-  //art.filter(BLUR,artBlur.value());
-  //art.shader(blurShader);
-  //blurShader.setUniform('tex0', art);
-  artBlurShader.setUniform('texelSize', [artBlur.value(), artBlur.value()]);
-  art.clear();
-  art.rect(-art.width/2,-art.height/2,art.width,art.height); 
-
-}
-
-function updateHalftone() {
-  loadHalftone();
-  updateHalftoneBlur();
-}
-
-
-
-function updateHalftonePattern() {
-  loadHalftonePattern();
-  loadHalftone();
-}
-
-function updateHalftoneBlur() {
-  halftoneBlurShader.setUniform('texelSize', [halftoneBlur.value(), halftoneBlur.value()]);
-  halftone.clear();
-  halftone.rect(0,0,width,height); 
 }
 
 function save() {
   save();  
 }
 
+// PImageWithShader.js + PUploadedImage.js showcase
+// let u1, u2;
+// let s1 = undefined, s2;
+// let b;
+// let reloadShader = false;
 
-// ###################################################
-// trying to pull image from thispersondoesntexist.com
-// ###################################################
-
-// let thisPersonDoesNotExist;
-// let person, personCopy;
-// let isPersonLoaded = false;
-// let personImage;
+// function preload() {
+//   b1 = loadShader('assets/shaders/blur.vert', 'assets/shaders/blur.frag');
+//   b2 = loadShader('assets/shaders/blur.vert', 'assets/shaders/blur.frag');
+// }
 
 // function setup() {
 //   createCanvas(windowWidth,windowHeight);
 
-//   thisPersonDoesNotExist = createImg(
-//     'https://thispersondoesnotexist.com/image', personLoaded
-//   );
-//   console.log(thisPersonDoesNotExist)
-//   thisPersonDoesNotExist.crossOrigin = "Anonymous";
-//   thisPersonDoesNotExist.hide();
-// }
+//   u1 = new PUploadedImage();
+//   u1.init();
+//   u1.position(0,0);
+//   u1.callback = () => {
+//     if (s1 == undefined) {
+//       s1 = new PImageWithShader(u1.image,b1);
+//     } else {
+//       s1.updateImage(u1.image);
+//     }
+//   }
 
+//   u2 = new PUploadedImage();
+//   u2.init();
+//   u2.position(width/2,0);
+//   u2.callback = () => {
+//     if (s2 == undefined) {
+//       s2 = new PImageWithShader(u2.image,b2);
+//     } else {
+//       s2.updateImage(u2.image);
+//     }
+//   }
 
-// function personLoaded() {
-
-//   person = createGraphics(thisPersonDoesNotExist.width, thisPersonDoesNotExist.height);
-//   person.image(thisPersonDoesNotExist,0,0,50,50); 
-//   console.log('person loaded!');
-//   isPersonLoaded = true;
 // }
 
 // function draw() {
-//   background(255);
-// //  if (isPersonLoaded) {
-//     image(thisPersonDoesNotExist, mouseX, mouseY, 50, 50);
-// //    filter(BLUR);
-
-// //  }
-
+//   background(200);
+//   if (s1) {
+//     s1.setUniform('texelSize', [mouseX/1000000, mouseY/1000000]);
+//     image(s1.image(),0,0,s1.image().width,s1.image().height);
+//   }
+//   if (s2) {
+//     s2.content.rect(mouseX,mouseY, 10,10);
+//     s2.setUniform('texelSize', [mouseX/100000, mouseY/100000]);
+//     image(s2.image(),width/2,0,s2.image().width,s2.image().height);
+//   }
 // }
 
-// ###################################################
-// using shaders to blur things out (https://github.com/aferriss/p5jsShaderExamples)
-// ###################################################
-
-// let camShader;
-// let img;
-// let pg;
-
-// // the camera variable
-// let cam;
-
-// function preload(){
-//   // load the shader
-//   camShader = loadShader('assets/blur.vert', 'assets/blur.frag');
-//   img = loadImage('assets/person.jpg');
-// }
-
-// function setup() {
-//   // shaders require WEBGL mode to work
-//   createCanvas(windowWidth, windowHeight);
-//   noStroke();
-//   pg = createGraphics(img.width,img.height,WEBGL);
-//   pg.shader(camShader);
-//   camShader.setUniform('tex0', img);
-//   //camShader.setUniform('texelSize', [0.01, 0.01]);
-//   pg.rect(0,0,img.width,img.height);
-//   //pg.image(img,-width/2,-height/2,width,height);
-
-//   // initialize the webcam at the window size
-
-// }
-
-// function draw() {  
-//   // shader() sets the active shader with our shader
-//   //background(200);
-
-//     // lets just send the cam to our shader as a uniform
-//   //camShader.setUniform('tex0', pg);1
-
-
-//   camShader.setUniform('texelSize', [1/mouseX, 1/mouseY]);
-//   pg.clear();
-//   pg.rect(0,0,img.width,img.height);
-
-//   // also send the size of 1 texel on the screen
-//   //camShader.setUniform('texelSize', [0.01, 0.01]);
-
-//   image(pg,0,0,img.width,img.height);
-
-//   // rect gives us some geometry on the screen
-//   //rect(0,0,width, height);
-
-//   filter(THRESHOLD);
-// }
 
 function windowResized(){
   resizeCanvas(windowWidth, windowHeight);
 }
+
