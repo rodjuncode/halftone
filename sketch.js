@@ -1,3 +1,6 @@
+// person
+let person;
+
 // image
 let img;
 let imgShader;
@@ -8,6 +11,8 @@ let halftoneBlurred;
 let halftonePattern;
 let halftoneShader;
 
+let seed;
+
 // interface
 let _UI_MARGIN_X = 10;
 let _UI_MARGIN_Y = 10;
@@ -16,13 +21,12 @@ let _UI_COLUMN_WIDTH = 155;
 let interface = [];
 let imgBlurSlider;
 let halftoneBlurSlider;
-let threshold;
-let linesQty;
-let linesThickness;
-let frequency;
-let amplitude;
-let smooth;
-let bgcolor;
+let thresholdSlider;
+let linesQtySlider;
+let linesThicknessSlider;
+let frequencySlider;
+let amplitudeSlider;
+let smoothSlider;
 
 function preload() {
   imgShader = loadShader('assets/shaders/blur.vert', 'assets/shaders/blur.frag');
@@ -31,6 +35,8 @@ function preload() {
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
+
+  seed = random(1000);
 
   // image
   img = new PUploadedImage();
@@ -56,26 +62,29 @@ function setup() {
   halftoneBlurSlider = createSlider(0.0001, 0.001, 0.0001, 0.0001);
   halftoneBlurSlider.input(refreshHalftoneBlur);
   interface.push(halftoneBlurSlider);
-  threshold = createSlider(0, 1, 0.5, 0.01);
-  interface.push(threshold);
-  linesQty = createSlider(0, 50, 25, 5);
-  linesQty.input(refreshHalftonePattern);
-  interface.push(linesQty);
-  linesThickness = createSlider(0, 20, 10, 1);
-  linesThickness.input(refreshHalftonePattern);
-  interface.push(linesThickness);
-  frequency = createSlider(0, 50, 25, 1);
-  frequency.input(refreshHalftonePattern);
-  interface.push(frequency);
-  amplitude = createSlider(0, 50, 25, 1);
-  amplitude.input(refreshHalftonePattern);
-  interface.push(amplitude);
-  smooth = createSlider(1,100,50,1);
-  smooth.input(refreshHalftonePattern);
-  interface.push(smooth);
-  let btn = createButton('Salvar');
-  btn.mousePressed(save);
-  interface.push(btn);
+  thresholdSlider = createSlider(0, 1, 0.5, 0.01);
+  interface.push(thresholdSlider);
+  linesQtySlider = createSlider(0, 100, 50, 5);
+  linesQtySlider.input(refreshHalftonePattern);
+  interface.push(linesQtySlider);
+  linesThicknessSlider = createSlider(0, 20, 10, 1);
+  linesThicknessSlider.input(refreshHalftonePattern);
+  interface.push(linesThicknessSlider);
+  frequencySlider = createSlider(0, 50, 25, 1);
+  frequencySlider.input(refreshHalftonePattern);
+  interface.push(frequencySlider);
+  amplitudeSlider = createSlider(0, 50, 25, 1);
+  amplitudeSlider.input(refreshHalftonePattern);
+  interface.push(amplitudeSlider);
+  smoothSlider = createSlider(1,100,50,1);
+  smoothSlider.input(refreshHalftonePattern);
+  interface.push(smoothSlider);
+  let saveButton = createButton('Salvar');
+  saveButton.mousePressed(saveResult);
+  interface.push(saveButton);
+  let generateButton = createButton('Gerar Padrão');
+  generateButton.mousePressed(generate);
+  interface.push(generateButton);  
   for (let i = 0; i < interface.length; i++) {
     interface[i].position(_UI_MARGIN_X, _UI_MARGIN_Y + _UI_ELEM_MARGIN_Y*i);
   }
@@ -94,7 +103,7 @@ function draw() {
   }
   
  image(halftoneBlurred.image(),_UI_COLUMN_WIDTH,0);
- filter(THRESHOLD, threshold.value());
+ filter(THRESHOLD, thresholdSlider.value());
 }
 
 function refreshImgBlur() {
@@ -106,19 +115,47 @@ function refreshHalftoneBlur() {
 }
 
 function refreshHalftonePattern() {
-  let lines = linesQty.value();
-  let thickness = linesThickness.value();
+  
+  let lines = linesQtySlider.value();
+  let thickness = linesThicknessSlider.value();
+  let amplitude = amplitudeSlider.value();
+  let frequency = frequencySlider.value();
+  let smoothness = smoothSlider.value();
+    
   halftonePattern.clear();
   halftonePattern.stroke(0);
   halftonePattern.noFill();  
   halftonePattern.strokeWeight(thickness);
-  for (let i = 0; i < lines; i++) {
+
+  // generates one line
+  let z = seed;
+  let linePattern = [];
+  for (let i = 0; i < width; i++) {
+    linePattern.push(map(noise(z),0,1,-amplitude*10,amplitude*10));
+    z += frequency/10000;
+  }
+  
+  // draws several lines
+  for (let j = -height*0.5; j < height*1.5; j += (int) (height/lines)) {
+    halftonePattern.push();
+    halftonePattern.translate(0,j);
     halftonePattern.beginShape();
-    for (let j = 0; j < width; j+=smooth.value()) {
-      halftonePattern.vertex(j,height/lines*i+sin(j/frequency.value())*amplitude.value());
+    for (let i = 0; i < width; i+=smoothness) {
+      halftonePattern.vertex(i,linePattern[i]);
     }
     halftonePattern.endShape();
+    halftonePattern.pop();
   }
+
+  // simple waves
+  // for (let i = 0; i < lines; i++) {
+  //   halftonePattern.beginShape();
+  //   for (let j = 0; j < width; j+=smoothness) {
+  //     halftonePattern.vertex(j,height/lines*i+sin(j/freq)*amp);
+  //   }
+  //   halftonePattern.endShape();
+  // }  
+
   if (halftoneBlurred) {
     halftoneBlurred.content.clear();
     halftoneBlurred.content.image(halftonePattern,0,0);
@@ -126,11 +163,19 @@ function refreshHalftonePattern() {
   }
 }
 
-function save() {
+
+function generate() {
+  seed = random(1000);
+  refreshHalftonePattern();
+}
+
+
+function saveResult() {
   save();  
 }
 
-// PImageWithShader.js + PUploadedImage.js showcase
+
+// this is a PImageWithShader.js + PUploadedImage.js showcase
 // let u1, u2;
 // let s1 = undefined, s2;
 // let b;
@@ -185,4 +230,5 @@ function save() {
 function windowResized(){
   resizeCanvas(windowWidth, windowHeight);
 }
+
 
